@@ -4,6 +4,27 @@ All notable changes to this package are in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - Unreleased
+
+This release adopts the API changes of BYOMailer app pull requests #114 and #115.
+
+### Added
+
+- `contacts.subscribe()` subscribes again a contact that an admin or the API unsubscribed. It calls `POST /contacts/{contactId}/subscribe`. A contact that unsubscribed through an email link raises `ValidationError` with the field `contact`. A blacklisted address raises `ValidationError` with the field `email`.
+- The model `SequenceSummary`, for the items of `sequences.list()` and `sequences.iter()`.
+
+### Changed
+
+- `sequences.list()` returns `Page[SequenceSummary]`, and `sequences.iter()` yields `SequenceSummary`. `sequences.get()` still returns `Sequence`. If your code reads `steps`, `filters` or `content_variables` from a list item, call `sequences.get()`.
+- `Sequence` fields `steps_count`, `contacts_count`, `completed_count`, `active_count`, `filters` and `content_variables` are always set. They are not optional now.
+- The docs of `contacts.update()` say that an update never changes the subscription. The instance no longer subscribes a contact again on `PUT` or `PATCH`.
+- The docs of `contacts.add()` say that it subscribes again a contact that an admin unsubscribed. On a list with opt-in, the instance sends the opt-in email only when the contact is new on the list.
+- The webhook docs say that `newsletter.sent` arrives one time for an A/B newsletter, when the instance picks the winner.
+
+### Removed
+
+- The README caution that said that `contacts.update()` subscribes again a contact that an admin unsubscribed.
+
 ## [0.1.0] - Unreleased
 
 ### Added

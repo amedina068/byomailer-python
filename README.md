@@ -132,6 +132,8 @@ if contact.created:
 
 `contact.created` is `True` when the instance created the contact (201), and `False` when the contact existed (200).
 
+If an admin or the API unsubscribed the contact, `add()` subscribes the contact again. An unsubscribe that the contact made stays. On a list with opt-in, the instance sends the opt-in email only when the contact is new on the list.
+
 Change a contact. Only the fields that you give change:
 
 ```python
@@ -143,14 +145,30 @@ print(contact.attributes)
 
 `tags` adds tags and `remove_tags` removes tags. `attributes` sets custom attributes and keeps the other attributes. The client sends each attribute at the top level of the request body, as the API expects. An attribute cannot have the name `email`, `name`, `tags` or `remove_tags`.
 
-Unsubscribe a contact, or remove a contact from one list:
+`update()` never changes the subscription of the contact.
+
+Unsubscribe a contact, subscribe a contact again, or remove a contact from one list:
 
 ```python
 client.contacts.unsubscribe(42)  # stops all email. The contact stays on its lists.
+contact = client.contacts.subscribe(42)  # clears an unsubscribe that an admin or the API made
 contact = client.contacts.remove_from_list(42, 3)  # returns the contact
 ```
 
-> **CAUTION:** In BYOMailer, `add()` and `update()` subscribe again a contact that `unsubscribe()` unsubscribed. They do not subscribe again a contact that unsubscribed by its own action.
+`subscribe()` does not change a subscribed contact. It raises `ValidationError` in two cases:
+
+- The contact unsubscribed through an email link. The error is in `errors["contact"]`. Only the contact can subscribe again.
+- The email address is blacklisted. The error is in `errors["email"]`.
+
+```python
+from byomailer import ValidationError
+
+try:
+    client.contacts.subscribe(42)
+except ValidationError as error:
+    if "contact" in error.errors:
+        print("The contact unsubscribed through an email link.")
+```
 
 ### Lists
 
@@ -248,7 +266,8 @@ A filter is a dict in the format of the BYOMailer dashboard. It has `category`, 
 page = client.sequences.list(status="live")
 for sequence in client.sequences.iter(search="Welcome"):
     ...
-sequence = client.sequences.get(2)  # includes the steps
+sequence = client.sequences.get(2)  # includes the steps, the filters and the content variables
+print(sequence.contacts_count, sequence.completed_count, sequence.active_count)
 stats = client.sequences.stats(2)
 print(stats.stats.contacts, stats.mail_metrics.open_rate)
 step = client.sequences.step(2, 11)
@@ -258,6 +277,8 @@ step = client.sequences.replace_step_filters(2, 11, [not_customer])
 variables = client.sequences.variables(2)
 variables = client.sequences.replace_variables(2, {"first_name": "friend"})
 ```
+
+`list()` and `iter()` return `SequenceSummary` objects. A summary has the counts but no steps, filters or content variables. `get()` returns a `Sequence` with all fields. `active_count` is the number of contacts that did not complete the sequence. The `status` filter accepts `"draft"`, `"live"` or `"paused"`.
 
 A contact who does not match the filters of a step skips only that step. An empty list removes the filters.
 
@@ -434,7 +455,7 @@ headers = {
 | `sequence.completed` | `contact`, `sequence`: `id`, `name` |
 | `webhook.test` | `message` |
 
-`contact` has `id`, `uuid`, `email`, `name` and the custom attributes of the contact. The app can add new events. Make your code accept an event type that it does not know.
+`contact` has `id`, `uuid`, `email`, `name` and the custom attributes of the contact. For an A/B newsletter, `newsletter.sent` arrives one time, when the instance picks the winner. The app can add new events. Make your code accept an event type that it does not know.
 
 Each delivery also has the headers `X-Byomailer-Event` (the event type) and `X-Byomailer-Delivery` (a UUID for the delivery). The app can send a delivery again after a failure. Use `X-Byomailer-Delivery` to find a delivery that you received before.
 

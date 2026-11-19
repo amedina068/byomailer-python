@@ -27,7 +27,7 @@ _CONTACT_FIELDS = frozenset({"email", "name", "tags", "remove_tags"})
 
 
 class Contacts(Resource):
-    """Read, add, change and unsubscribe contacts."""
+    """Read, add, change, unsubscribe and subscribe contacts."""
 
     def list(
         self,
@@ -96,6 +96,11 @@ class Contacts(Resource):
         ``tags`` are tag names. The instance makes a tag that does not exist.
         ``attributes`` are custom attributes. The result has ``created=True``
         when the instance made a new contact.
+
+        If an admin or the API unsubscribed the contact, this call subscribes
+        the contact again. An unsubscribe that the contact made stays. On a
+        list with opt-in, only a contact that is new on the list gets the
+        opt-in email.
         """
         body = {
             **_attributes(attributes),
@@ -120,7 +125,8 @@ class Contacts(Resource):
 
         ``tags`` adds tags and ``remove_tags`` removes tags, by name.
         ``attributes`` sets custom attributes and keeps the other attributes.
-        A ``None`` value stores ``null``.
+        A ``None`` value stores ``null``. An update never changes the
+        subscription. Use ``subscribe()`` to subscribe a contact again.
         """
         body = {
             **_attributes(attributes),
@@ -132,6 +138,15 @@ class Contacts(Resource):
     def unsubscribe(self, contact_id: int) -> Contact:
         """Unsubscribe a contact from all email. The contact stays on its lists."""
         return one(Contact, self._client._post(f"/contacts/{contact_id}/unsubscribe"))
+
+    def subscribe(self, contact_id: int) -> Contact:
+        """Subscribe again a contact that an admin or the API unsubscribed.
+
+        A subscribed contact does not change. Raise ``ValidationError`` when
+        the contact unsubscribed through an email link (field ``contact``) or
+        when the address is blacklisted (field ``email``).
+        """
+        return one(Contact, self._client._post(f"/contacts/{contact_id}/subscribe"))
 
     def remove_from_list(self, contact_id: int, list_id: int) -> Contact:
         """Remove a contact from one list. Return the contact with its other lists."""

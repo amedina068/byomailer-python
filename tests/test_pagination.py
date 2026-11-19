@@ -127,3 +127,14 @@ def test_page_without_meta_has_no_next_cursor(client: BYOMailer, transport: Fake
     page = client.lists.list()
     assert page.next_cursor is None
     assert page.data[0].name == "Readers"
+
+
+def test_iter_reads_the_cursor_from_meta_only(client: BYOMailer, transport: FakeTransport) -> None:
+    last_page = cursor_page([LIST])
+    last_page["links"]["next"] = "https://mail.example.com/api/v1/lists?cursor=stale"
+    transport.reply(200, cursor_page([LIST], next_cursor="c2"))
+    transport.reply(200, last_page)
+
+    assert len(list(client.lists.iter())) == 2
+    assert len(transport.requests) == 2
+    assert transport.query(1) == [("per_page", "25"), ("cursor", "c2")]

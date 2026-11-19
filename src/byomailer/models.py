@@ -34,6 +34,7 @@ __all__ = [
     "SequenceStats",
     "SequenceStep",
     "SequenceStepStats",
+    "SequenceSummary",
     "StepMessage",
     "Tag",
     "TestEmail",
@@ -348,27 +349,43 @@ class SequenceStep(Model):
 
 
 @dataclass(frozen=True)
-class Sequence(Model):
-    """A sequence.
+class SequenceSummary(Model):
+    """A sequence in the result of ``sequences.list()``. Get the steps with ``sequences.get()``.
 
-    ``sequences.list()`` sends a summary. For a sequence from a list,
-    ``steps`` is empty and ``segment_id``, ``filters``, ``content_variables``
-    and ``created_at`` are ``None``.
+    ``active_count`` is the number of contacts that did not complete the sequence.
     """
 
     id: int
     name: str
     status: str
-    steps_count: int | None = None
-    contacts_count: int | None = None
-    completed_count: int | None = None
-    active_count: int | None = None
-    steps: tuple[SequenceStep, ...] = ()
-    segment_id: int | None = None
-    filters: tuple[Mapping[str, Any], ...] | None = None
-    content_variables: Mapping[str, str] | None = None
+    steps_count: int
+    contacts_count: int
+    completed_count: int
+    active_count: int
     project_ids: tuple[int, ...] | None = None
-    created_at: datetime | None = None
+    raw: Mapping[str, Any] = _raw()
+
+
+@dataclass(frozen=True)
+class Sequence(Model):
+    """A sequence with its steps, its filters and its content variables.
+
+    ``active_count`` is the number of contacts that did not complete the sequence.
+    """
+
+    id: int
+    name: str
+    status: str
+    steps_count: int
+    contacts_count: int
+    completed_count: int
+    active_count: int
+    steps: tuple[SequenceStep, ...]
+    segment_id: int | None
+    filters: tuple[Mapping[str, Any], ...]
+    content_variables: Mapping[str, str]
+    created_at: datetime | None
+    project_ids: tuple[int, ...] | None = None
     raw: Mapping[str, Any] = _raw()
 
 

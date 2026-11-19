@@ -30,6 +30,7 @@ from byomailer.models import (
     SequenceStats,
     SequenceStep,
     SequenceStepStats,
+    SequenceSummary,
     TestEmail,
 )
 
@@ -216,15 +217,15 @@ class Sequences(Resource):
         project: int | None = None,
         per_page: int | None = None,
         cursor: str | None = None,
-    ) -> Page[Sequence]:
-        """Return one page of sequences, as summaries."""
+    ) -> Page[SequenceSummary]:
+        """Return one page of sequences, as summaries without steps."""
         params = {
             "status": status,
             "search": search,
             "project": project,
             **page_params(per_page, cursor),
         }
-        return page(Sequence, self._client._get("/sequences", params))
+        return page(SequenceSummary, self._client._get("/sequences", params))
 
     def iter(
         self,
@@ -233,7 +234,7 @@ class Sequences(Resource):
         search: str | None = None,
         project: int | None = None,
         per_page: int = DEFAULT_PER_PAGE,
-    ) -> Iterator[Sequence]:
+    ) -> Iterator[SequenceSummary]:
         return paginate(
             lambda cursor: self.list(
                 status=status, search=search, project=project, per_page=per_page, cursor=cursor

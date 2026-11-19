@@ -25,9 +25,11 @@ from byomailer import (
     SequenceStats,
     SequenceStep,
     SequenceStepStats,
+    SequenceSummary,
     Tag,
     TestEmail,
     Topic,
+    ValidationError,
     WebhookDelivery,
     WebhookEndpoint,
 )
@@ -67,6 +69,7 @@ CASES: list[tuple[str, Call, str, str, Any, int, Any, Any]] = [
     ("contacts.add", lambda c: c.contacts.add(3, "ana@example.com"), "POST", "/lists/3/contacts", {"email": "ana@example.com"}, 201, data(CONTACT), Contact),
     ("contacts.update", lambda c: c.contacts.update(42, name="Ana"), "PATCH", "/contacts/42", {"name": "Ana"}, 200, data(CONTACT), Contact),
     ("contacts.unsubscribe", lambda c: c.contacts.unsubscribe(42), "POST", "/contacts/42/unsubscribe", None, 200, data(CONTACT), Contact),
+    ("contacts.subscribe", lambda c: c.contacts.subscribe(42), "POST", "/contacts/42/subscribe", None, 200, data(CONTACT), Contact),
     ("contacts.remove_from_list", lambda c: c.contacts.remove_from_list(42, 3), "DELETE", "/lists/3/contacts/42", None, 200, data(CONTACT), Contact),
     # Lists
     ("lists.list", lambda c: c.lists.list(), "GET", "/lists", None, 200, cursor_page([LIST]), Page),
@@ -238,6 +241,26 @@ def test_update_contact_sends_only_the_given_fields(
     assert transport.json() == {"name": None, "remove_tags": ["trial"], "plan": None}
 
 
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        (
+            "contact",
+            "The contact unsubscribed through an email link. Only the contact can subscribe again.",
+        ),
+        ("email", "This email address has been blacklisted."),
+    ],
+)
+def test_subscribe_refusal_is_a_validation_error(
+    client: BYOMailer, transport: FakeTransport, field: str, message: str
+) -> None:
+    transport.reply(422, {"message": message, "errors": {field: [message]}})
+    with pytest.raises(ValidationError) as caught:
+        client.contacts.subscribe(42)
+    assert caught.value.errors == {field: [message]}
+    assert len(transport.requests) == 1
+
+
 def test_contact_model(client: BYOMailer, transport: FakeTransport) -> None:
     transport.reply(200, data(CONTACT))
     contact = client.contacts.get(42)
@@ -358,19 +381,28 @@ def test_send_test_result(client: BYOMailer, transport: FakeTransport) -> None:
 def test_sequence_model(client: BYOMailer, transport: FakeTransport) -> None:
     transport.reply(200, data(SEQUENCE))
     sequence = client.sequences.get(2)
+    assert isinstance(sequence, Sequence)
+    assert (sequence.contacts_count, sequence.completed_count, sequence.active_count) == (10, 4, 6)
+    assert sequence.steps_count == 1
     assert sequence.steps[0].message is not None
     assert sequence.steps[0].message.email_template is not None
     assert sequence.steps[0].message.email_template.is_default is True
+    assert sequence.filters == ()
     assert sequence.content_variables == {"first_name": "friend"}
 
 
 def test_sequence_summary_model(client: BYOMailer, transport: FakeTransport) -> None:
     transport.reply(200, cursor_page([SEQUENCE_SUMMARY]))
     sequence = client.sequences.list(status="live").data[0]
-    assert sequence.active_count == 6
-    assert sequence.steps == ()
-    assert sequence.filters is None
+    assert isinstance(sequence, SequenceSummary)
+    assert (sequence.contacts_count, sequence.completed_count, sequence.active_count) == (10, 4, 6)
+    assert not hasattr(sequence, "steps")
     assert transport.query() == [("status", "live")]
+
+
+def test_sequence_iter_yields_summaries(client: BYOMailer, transport: FakeTransport) -> None:
+    transport.reply(200, cursor_page([SEQUENCE_SUMMARY]))
+    assert all(isinstance(item, SequenceSummary) for item in client.sequences.iter())
 
 
 def test_sequence_stats_model(client: BYOMailer, transport: FakeTransport) -> None:
