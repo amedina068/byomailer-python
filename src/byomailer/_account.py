@@ -111,7 +111,8 @@ class Projects(Resource):
         return one(Project, self._client._post("/projects", {"name": name}))
 
     def rename(self, project_id: int, name: str) -> Project:
-        return one(Project, self._client._patch(f"/projects/{project_id}", {"name": name}))
+        path = f"/projects/{project_id}"
+        return one(Project, self._client._patch(path, {"name": name}, idempotent=True))
 
     def delete(self, project_id: int) -> None:
         self._client._delete(f"/projects/{project_id}")
@@ -156,7 +157,8 @@ class WebhookEndpoints(Resource):
         body = given(active=active, description=description)
         if not body:
             raise ValueError("Give active, description or both.")
-        return one(WebhookEndpoint, self._client._patch(f"/webhook-endpoints/{endpoint_id}", body))
+        path = f"/webhook-endpoints/{endpoint_id}"
+        return one(WebhookEndpoint, self._client._patch(path, body, idempotent=True))
 
     def delete(self, endpoint_id: int) -> None:
         self._client._delete(f"/webhook-endpoints/{endpoint_id}")
@@ -180,7 +182,7 @@ class WebhookEndpoints(Resource):
         path = f"/webhook-endpoints/{endpoint_id}/secret"
         return one(WebhookEndpoint, self._client._post(path))
 
-    def test(self, endpoint_id: int) -> WebhookDelivery:
+    def send_test(self, endpoint_id: int) -> WebhookDelivery:
         """Queue a ``webhook.test`` delivery to the endpoint.
 
         The instance allows 10 of these requests a minute for each client.

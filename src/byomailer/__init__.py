@@ -53,7 +53,7 @@ from byomailer.models import (
     WebhookDelivery,
     WebhookEndpoint,
 )
-from byomailer.webhooks import verify_webhook
+from byomailer.webhooks import WebhookEvent, verify_webhook
 
 __all__ = [
     "UNSET",
@@ -97,6 +97,7 @@ __all__ = [
     "ValidationError",
     "WebhookDelivery",
     "WebhookEndpoint",
+    "WebhookEvent",
     "WebhookVerificationError",
     "__version__",
     "verify_webhook",

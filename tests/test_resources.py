@@ -70,7 +70,7 @@ CASES: list[tuple[str, Call, str, str, Any, int, Any, Any]] = [
     ("contacts.update", lambda c: c.contacts.update(42, name="Ana"), "PATCH", "/contacts/42", {"name": "Ana"}, 200, data(CONTACT), Contact),
     ("contacts.unsubscribe", lambda c: c.contacts.unsubscribe(42), "POST", "/contacts/42/unsubscribe", None, 200, data(CONTACT), Contact),
     ("contacts.subscribe", lambda c: c.contacts.subscribe(42), "POST", "/contacts/42/subscribe", None, 200, data(CONTACT), Contact),
-    ("contacts.remove_from_list", lambda c: c.contacts.remove_from_list(42, 3), "DELETE", "/lists/3/contacts/42", None, 200, data(CONTACT), Contact),
+    ("contacts.remove_from_list", lambda c: c.contacts.remove_from_list(3, 42), "DELETE", "/lists/3/contacts/42", None, 200, data(CONTACT), Contact),
     # Lists
     ("lists.list", lambda c: c.lists.list(), "GET", "/lists", None, 200, cursor_page([LIST]), Page),
     ("lists.create", lambda c: c.lists.create("Readers"), "POST", "/lists", {"name": "Readers"}, 201, data(LIST), MailList),
@@ -136,7 +136,7 @@ CASES: list[tuple[str, Call, str, str, Any, int, Any, Any]] = [
     ("webhook_endpoints.delete", lambda c: c.webhook_endpoints.delete(12), "DELETE", "/webhook-endpoints/12", None, 204, None, type(None)),
     ("webhook_endpoints.deliveries", lambda c: c.webhook_endpoints.deliveries(12), "GET", "/webhook-endpoints/12/deliveries", None, 200, cursor_page([DELIVERY]), Page),
     ("webhook_endpoints.rotate_secret", lambda c: c.webhook_endpoints.rotate_secret(12), "POST", "/webhook-endpoints/12/secret", None, 200, data(ENDPOINT_WITH_SECRET), WebhookEndpoint),
-    ("webhook_endpoints.test", lambda c: c.webhook_endpoints.test(12), "POST", "/webhook-endpoints/12/test", None, 202, data(DELIVERY), WebhookDelivery),
+    ("webhook_endpoints.send_test", lambda c: c.webhook_endpoints.send_test(12), "POST", "/webhook-endpoints/12/test", None, 202, data(DELIVERY), WebhookDelivery),
 ]  # fmt: skip
 
 
@@ -489,7 +489,7 @@ def test_webhook_endpoint_update_can_clear_the_description(
 
 def test_webhook_delivery_model(client: BYOMailer, transport: FakeTransport) -> None:
     transport.reply(202, data(DELIVERY))
-    delivery = client.webhook_endpoints.test(12)
+    delivery = client.webhook_endpoints.send_test(12)
     assert delivery.event_type == "webhook.test"
     assert delivery.payload["event"] == "webhook.test"
     assert delivery.dispatched_at == datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc)

@@ -133,11 +133,12 @@ class Contacts(Resource):
             **given(email=email, name=name),
             **not_none(tags=tags, remove_tags=remove_tags),
         }
-        return one(Contact, self._client._patch(f"/contacts/{contact_id}", body))
+        return one(Contact, self._client._patch(f"/contacts/{contact_id}", body, idempotent=True))
 
     def unsubscribe(self, contact_id: int) -> Contact:
         """Unsubscribe a contact from all email. The contact stays on its lists."""
-        return one(Contact, self._client._post(f"/contacts/{contact_id}/unsubscribe"))
+        path = f"/contacts/{contact_id}/unsubscribe"
+        return one(Contact, self._client._post(path, idempotent=True))
 
     def subscribe(self, contact_id: int) -> Contact:
         """Subscribe again a contact that an admin or the API unsubscribed.
@@ -146,9 +147,10 @@ class Contacts(Resource):
         the contact unsubscribed through an email link (field ``contact``) or
         when the address is blacklisted (field ``email``).
         """
-        return one(Contact, self._client._post(f"/contacts/{contact_id}/subscribe"))
+        path = f"/contacts/{contact_id}/subscribe"
+        return one(Contact, self._client._post(path, idempotent=True))
 
-    def remove_from_list(self, contact_id: int, list_id: int) -> Contact:
+    def remove_from_list(self, list_id: int, contact_id: int) -> Contact:
         """Remove a contact from one list. Return the contact with its other lists."""
         response = self._client._request("DELETE", f"/lists/{list_id}/contacts/{contact_id}")
         return one(Contact, response.json())
@@ -167,7 +169,9 @@ class Lists(Resource):
         return one(MailList, self._client._post("/lists", {"name": name}))
 
     def rename(self, list_id: int, name: str) -> MailList:
-        return one(MailList, self._client._patch(f"/lists/{list_id}", {"name": name}))
+        return one(
+            MailList, self._client._patch(f"/lists/{list_id}", {"name": name}, idempotent=True)
+        )
 
     def delete(self, list_id: int) -> None:
         self._client._delete(f"/lists/{list_id}")
@@ -189,7 +193,8 @@ class Topics(Resource):
     ) -> Topic:
         """Replace the name and the description. ``None`` clears the description."""
         body = {"name": name, "description": description}
-        return one(Topic, self._client._patch(f"/lists/{list_id}/topics/{topic_id}", body))
+        path = f"/lists/{list_id}/topics/{topic_id}"
+        return one(Topic, self._client._patch(path, body, idempotent=True))
 
     def delete(self, list_id: int, topic_id: int) -> None:
         self._client._delete(f"/lists/{list_id}/topics/{topic_id}")
@@ -206,7 +211,7 @@ class Tags(Resource):
         return one(Tag, self._client._post("/tags", {"name": name}))
 
     def rename(self, tag_id: int, name: str) -> Tag:
-        return one(Tag, self._client._patch(f"/tags/{tag_id}", {"name": name}))
+        return one(Tag, self._client._patch(f"/tags/{tag_id}", {"name": name}, idempotent=True))
 
     def delete(self, tag_id: int) -> None:
         self._client._delete(f"/tags/{tag_id}")

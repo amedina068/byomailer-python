@@ -6,14 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The
 
 ## [0.2.0] - Unreleased
 
-This release adopts the API changes of BYOMailer app pull requests #114 and #115.
+This release adopts the API changes of BYOMailer app pull requests #114 and #115. It also gives the same behavior as the JS, PHP and Ruby SDKs.
 
 ### Added
+
+- The MIT license: a `LICENSE` file and `license = "MIT"` in `pyproject.toml`.
+- `WebhookEvent`, the result of `verify_webhook()`.
+- The `"payload"` reason of `WebhookVerificationError`: the signature is valid, but the body is not a JSON object.
 
 - `contacts.subscribe()` subscribes again a contact that an admin or the API unsubscribed. It calls `POST /contacts/{contactId}/subscribe`. A contact that unsubscribed through an email link raises `ValidationError` with the field `contact`. A blacklisted address raises `ValidationError` with the field `email`.
 - The model `SequenceSummary`, for the items of `sequences.list()` and `sequences.iter()`.
 
 ### Changed
+
+- **Breaking:** `verify_webhook()` returns a `WebhookEvent` with `type`, `payload`, `timestamp` and `delivery_id`. Before, it returned the payload `dict`. Read the payload from `event.payload`. `delivery_id` is `None` when the `X-Byomailer-Delivery` header is missing.
+- **Breaking:** `contacts.remove_from_list(list_id, contact_id)` takes the list ID first, the same order as the other SDKs.
+- **Breaking:** `webhook_endpoints.test()` is now `webhook_endpoints.send_test()`, the same name as in the other SDKs.
+- The rule for a connection error before the send did not change: the client retries each operation after a DNS failure, a refused connection or a connect timeout. The 12 SDKs of the contract now use this rule.
+- The client retries the operations of the idempotent list after a 5xx, a connection error or a timeout: `contacts.update()`, `contacts.subscribe()`, `contacts.unsubscribe()`, `newsletters.count_recipients()`, the renames, `topics.update()`, `blocks.update()`, `webhook_endpoints.update()`, `replace_variables()` and `replace_step_filters()`.
+- The client waits for `Retry-After` on a 5xx too, not only on a 429.
+- `verify_webhook()` changes the signature header to lowercase before the compare. A missing signature header now gives `"signature"` before a missing timestamp header.
+- The README gives the idempotent list and the MIT license.
 
 - `sequences.list()` returns `Page[SequenceSummary]`, and `sequences.iter()` yields `SequenceSummary`. `sequences.get()` still returns `Sequence`. If your code reads `steps`, `filters` or `content_variables` from a list item, call `sequences.get()`.
 - `Sequence` fields `steps_count`, `contacts_count`, `completed_count`, `active_count`, `filters` and `content_variables` are always set. They are not optional now.

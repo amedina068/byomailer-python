@@ -177,7 +177,7 @@ class Newsletters(Resource):
         The instance allows 30 of these requests a minute.
         """
         body = {"filters": builtins.list(filters or [])}
-        result = self._client._post("/newsletters/contacts/preview", body)
+        result = self._client._post("/newsletters/contacts/preview", body, idempotent=True)
         return int(result["count"])
 
     def send_test(self, newsletter_id: int) -> TestEmail:
@@ -202,7 +202,8 @@ class Newsletters(Resource):
     ) -> ContentVariables:
         """Replace all default values of the variables of a draft or scheduled newsletter."""
         body = {"content_variables": dict(variables)}
-        result = self._client._patch(f"/newsletters/{newsletter_id}/variables", body)
+        path = f"/newsletters/{newsletter_id}/variables"
+        result = self._client._patch(path, body, idempotent=True)
         return one(ContentVariables, result)
 
 
@@ -264,7 +265,7 @@ class Sequences(Resource):
         """
         path = f"/sequences/{sequence_id}/steps/{step_id}/filters"
         body = {"filters": builtins.list(filters)}
-        return one(SequenceStep, self._client._patch(path, body))
+        return one(SequenceStep, self._client._patch(path, body, idempotent=True))
 
     def variables(self, sequence_id: int) -> ContentVariables:
         """Return the content variables and their default values."""
@@ -275,7 +276,8 @@ class Sequences(Resource):
     ) -> ContentVariables:
         """Replace all default values of the content variables of the sequence."""
         body = {"content_variables": dict(variables)}
-        result = self._client._patch(f"/sequences/{sequence_id}/variables", body)
+        path = f"/sequences/{sequence_id}/variables"
+        result = self._client._patch(path, body, idempotent=True)
         return one(ContentVariables, result)
 
     def export_step_mails(
@@ -325,7 +327,7 @@ class Blocks(Resource):
     def update(self, block_id: int, *, name: str, html_content: str) -> Block:
         """Replace the name and the HTML of a block."""
         body = {"name": name, "html_content": html_content}
-        return one(Block, self._client._patch(f"/blocks/{block_id}", body))
+        return one(Block, self._client._patch(f"/blocks/{block_id}", body, idempotent=True))
 
     def delete(self, block_id: int) -> None:
         self._client._delete(f"/blocks/{block_id}")

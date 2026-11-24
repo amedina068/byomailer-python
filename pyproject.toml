@@ -4,6 +4,8 @@ dynamic = ["version"]
 description = "Python client for the BYOMailer API."
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "BYOMailer" }]
 keywords = ["byomailer", "email", "newsletter", "amazon-ses", "webhooks", "api", "sdk"]
 classifiers = [

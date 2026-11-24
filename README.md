@@ -28,6 +28,7 @@ for contact in client.contacts.iter(tags=[5]):
 - [Retries](#retries)
 - [Django and FastAPI](#django-and-fastapi)
 - [Supported Python versions](#supported-python-versions)
+- [License](#license)
 
 ## Install
 
@@ -38,6 +39,8 @@ pip install "git+https://github.com/amedina068/byomailer-python.git"
 # or
 uv add "git+https://github.com/amedina068/byomailer-python.git"
 ```
+
+The repository is private. Your Git client needs read access to it.
 
 The package has no dependencies. It uses only the Python standard library.
 
@@ -152,7 +155,7 @@ Unsubscribe a contact, subscribe a contact again, or remove a contact from one l
 ```python
 client.contacts.unsubscribe(42)  # stops all email. The contact stays on its lists.
 contact = client.contacts.subscribe(42)  # clears an unsubscribe that an admin or the API made
-contact = client.contacts.remove_from_list(42, 3)  # returns the contact
+contact = client.contacts.remove_from_list(3, 42)  # list 3, contact 42. Returns the contact.
 ```
 
 `subscribe()` does not change a subscribed contact. It raises `ValidationError` in two cases:
@@ -368,7 +371,7 @@ for delivery in client.webhook_endpoints.iter_deliveries(12):
     print(delivery.event_type, delivery.status, delivery.response_status)
 
 endpoint = client.webhook_endpoints.rotate_secret(12)  # the old secret stops at once
-delivery = client.webhook_endpoints.test(12)  # queues a webhook.test delivery
+delivery = client.webhook_endpoints.send_test(12)  # queues a webhook.test delivery
 ```
 
 The URL must be a public `https` URL. To change the URL or the events, delete the endpoint and create a new one.
@@ -407,23 +410,37 @@ from byomailer import WebhookVerificationError, verify_webhook
 try:
     event = verify_webhook(raw_body, headers, secret)
 except WebhookVerificationError as error:
-    print(error.reason)  # "signature" or "timestamp"
+    print(error.reason)  # "signature", "timestamp" or "payload"
     raise
 
-if event["event"] == "contact.unsubscribed":
-    print(event["contact"]["email"])
+if event.type == "contact.unsubscribed":
+    print(event.payload["contact"]["email"], event.delivery_id)
 ```
 
 1. Give the raw request body, byte for byte. Do not parse the JSON and encode it again. The app escapes Unicode as `\uXXXX`, so a new encoding gives other bytes.
 2. Give the request headers. The header names are not case-sensitive.
 3. Give the full secret, with its `whsec_` prefix.
 
-`verify_webhook()` returns the decoded payload. When the delivery is not valid, it raises `WebhookVerificationError`. Its `reason` is:
+`verify_webhook()` returns a `WebhookEvent`:
+
+| Field | Description |
+|---|---|
+| `type` | The event type: `event` of the payload, or the `X-Byomailer-Event` header. |
+| `payload` | The decoded JSON body, as a `dict`. |
+| `timestamp` | The Unix time when the instance signed the delivery. |
+| `delivery_id` | The `X-Byomailer-Delivery` header (a UUID). `None` when the header is missing or empty. |
+
+Use `delivery_id` to ignore a delivery that you received before. An older instance does not send the delivery header. Then the verification passes and `delivery_id` is `None`.
+
+When the delivery is not valid, `verify_webhook()` raises `WebhookVerificationError`. Its `reason` is:
 
 | `reason` | Cause |
 |---|---|
 | `"signature"` | The `X-Byomailer-Signature` header is missing, or the signature does not match. |
-| `"timestamp"` | The `X-Byomailer-Timestamp` header is missing, or it is more than 300 seconds before or after the current time. |
+| `"timestamp"` | The `X-Byomailer-Timestamp` header is missing, is not a Unix time, or is more than 300 seconds before or after the current time. |
+| `"payload"` | The signature is valid, but the body is not a JSON object. |
+
+The checks run in this order: the signature header, the timestamp header, the signature, the tolerance and the body. The client changes the signature header to lowercase, then compares it in constant time. The JS, PHP and Ruby SDKs give the same fields and the same reasons.
 
 To change the tolerance, give `tolerance` in seconds. In a test, give `now` as the current Unix time:
 
@@ -474,7 +491,7 @@ BYOMailerError
 │   ├── ValidationError       422: .errors has the field errors
 │   ├── RateLimitError        429: .retry_after has the seconds to wait
 │   └── ServerError           5xx
-└── WebhookVerificationError  .reason is "signature" or "timestamp"
+└── WebhookVerificationError  .reason is "signature", "timestamp" or "payload"
 ```
 
 Each `APIError` has `status_code`, `message`, `body` and `headers`. Another status, for example 400 or a 3xx redirect, raises `APIError`.
@@ -497,17 +514,27 @@ An argument that breaks a rule before the request, for example `per_page=500`, r
 
 ## Retries
 
-The client retries a failed request two times by default. The wait before each retry grows exponentially (0.5, 1, 2 ... seconds, 8 seconds maximum) and has random jitter.
+The client retries a failed request two times by default. The timeout of one attempt is 30 seconds. The wait before each retry grows exponentially (0.5, 1, 2 ... seconds, 8 seconds maximum) and has random jitter. The JS, PHP and Ruby SDKs use the same values and the same rule.
 
-| Failure | GET, PUT, DELETE | POST, PATCH |
+| Failure | Idempotent operation | Other operation |
 |---|---|---|
 | 429 | Retry | Retry |
 | 5xx | Retry | No retry |
-| Connection not made (DNS, refused, connect timeout) | Retry | Retry |
-| Read timeout or closed connection | Retry | No retry |
+| DNS failure, refused connection, connect timeout | Retry | Retry. The instance did not get the request. |
+| Read timeout or reset after the send | Retry | No retry |
 | Other 4xx | No retry | No retry |
 
-- The client retries a 429 for each method, because the rate limiter refuses the request before the app does the action.
+These operations are idempotent:
+
+- Each GET and each DELETE.
+- `newsletters.count_recipients()`, because it only reads.
+- `contacts.update()`, `contacts.unsubscribe()` and `contacts.subscribe()`.
+- `lists.rename()`, `tags.rename()`, `projects.rename()`, `topics.update()`, `blocks.update()` and `webhook_endpoints.update()`.
+- `newsletters.replace_variables()`, `sequences.replace_variables()` and `sequences.replace_step_filters()`.
+
+The other writes are not idempotent. For example, a repeat of `contacts.add()` changes `created` from `True` to `False`. `newsletters.update()` with `status="live"` can start the send, and a repeat then gets a 422.
+
+- The client retries a 429 for each operation, because the rate limiter refuses the request before the app does the action.
 - If a response has a `Retry-After` header, the client waits for that time.
 - If `Retry-After` is more than 60 seconds, the client does not wait. It raises `RateLimitError` at once.
 - Set `max_retries=0` to stop all retries.
@@ -518,7 +545,7 @@ Three endpoints have a rate limit:
 |---|---|
 | `newsletters.count_recipients()` | 30 a minute for each user |
 | `newsletters.send_test()` | 5 a minute for each user |
-| `webhook_endpoints.test()` | 10 a minute for each client |
+| `webhook_endpoints.send_test()` | 10 a minute for each client |
 
 ## Django and FastAPI
 
@@ -575,8 +602,8 @@ def byomailer_webhook(request: HttpRequest) -> HttpResponse:
     except WebhookVerificationError:
         return HttpResponseBadRequest()
 
-    if event["event"] == "contact.unsubscribed":
-        mark_unsubscribed(event["contact"]["email"])
+    if event.type == "contact.unsubscribed":
+        mark_unsubscribed(event.payload["contact"]["email"])
     return HttpResponse(status=204)
 ```
 
@@ -639,8 +666,8 @@ async def byomailer_webhook(request: Request) -> Response:
     except WebhookVerificationError as error:
         raise HTTPException(status_code=400, detail=error.reason) from error
 
-    if event["event"] == "contact.unsubscribed":
-        await mark_unsubscribed(event["contact"]["email"])
+    if event.type == "contact.unsubscribed":
+        await mark_unsubscribed(event.payload["contact"]["email"])
     return Response(status_code=204)
 ```
 
@@ -651,6 +678,10 @@ Do not declare the body as a Pydantic model in this route. FastAPI then parses t
 The package supports Python 3.10, 3.11, 3.12, 3.13 and 3.14. CI runs the tests, the lint and the type check on each version.
 
 The package has full type hints and a `py.typed` file. `mypy --strict` passes on the package.
+
+## License
+
+MIT. Read [LICENSE](LICENSE).
 
 ## Development
 

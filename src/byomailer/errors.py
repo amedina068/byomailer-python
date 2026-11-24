@@ -46,8 +46,10 @@ class APIConnectionError(BYOMailerError):
     TLS error. The original exception is in ``__cause__``.
 
     Attributes:
-        request_sent: ``False`` when the instance did not receive the request.
-            Then a second attempt is safe for every method.
+        request_sent: ``False`` when the instance did not receive the request:
+            a DNS failure, a refused connection or a connect timeout. Then
+            the client retries each operation, also a write that is not
+            idempotent.
     """
 
     def __init__(self, message: str, *, request_sent: bool) -> None:
@@ -152,10 +154,14 @@ class WebhookVerificationError(BYOMailerError):
 
     Attributes:
         reason: ``"signature"`` when the signature is missing or wrong.
-            ``"timestamp"`` when the timestamp is missing or outside the tolerance.
+            ``"timestamp"`` when the timestamp is missing, is not a Unix time,
+            or is outside the tolerance. ``"payload"`` when the signature is
+            valid, but the body is not a JSON object.
     """
 
-    def __init__(self, message: str, *, reason: Literal["signature", "timestamp"]) -> None:
+    def __init__(
+        self, message: str, *, reason: Literal["signature", "timestamp", "payload"]
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.reason = reason

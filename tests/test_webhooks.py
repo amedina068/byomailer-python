@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from byomailer import WebhookVerificationError, verify_webhook
+from byomailer import WebhookEvent, WebhookVerificationError, verify_webhook
 from byomailer.webhooks import DEFAULT_TOLERANCE, sign
 
 VECTORS: dict[str, Any] = json.loads(
@@ -23,12 +23,14 @@ SECRET = "whsec_test0123456789abcdefghijklmnopqrstuvwxyz"
 
 
 def headers_of(case: dict[str, Any]) -> dict[str, str]:
-    return {
+    """Return the headers of a vector. A ``None`` value leaves the header out."""
+    headers = {
         "X-Byomailer-Signature": case["signature"],
         "X-Byomailer-Timestamp": case["timestamp"],
-        "X-Byomailer-Event": json.loads(case["body"])["event"],
-        "X-Byomailer-Delivery": "6f1c2d3e-0000-4000-8000-000000000000",
+        "X-Byomailer-Event": "newsletter.sent",
+        "X-Byomailer-Delivery": case["delivery"],
     }
+    return {name: value for name, value in headers.items() if value is not None}
 
 
 def signed_headers(body: str, timestamp: str) -> dict[str, str]:
@@ -39,8 +41,8 @@ def signed_headers(body: str, timestamp: str) -> dict[str, str]:
 
 
 def test_the_vectors_have_valid_and_invalid_cases() -> None:
-    assert len(VALID) == 4
-    assert len(INVALID) == 6
+    assert len(VALID) == 6
+    assert len(INVALID) == 12
     assert VECTORS["tolerance_seconds"] == DEFAULT_TOLERANCE
 
 
@@ -48,9 +50,13 @@ def test_the_vectors_have_valid_and_invalid_cases() -> None:
 def test_valid_vector_is_accepted(case: dict[str, Any]) -> None:
     body = case["body"].encode("utf-8")
     event = verify_webhook(body, headers_of(case), case["secret"], now=case["now"])
-    assert event == json.loads(case["body"])
-    assert event["event"]
-    assert event["occurred_at"]
+    payload = json.loads(case["body"])
+    assert event == WebhookEvent(
+        type=payload["event"],
+        payload=payload,
+        timestamp=int(case["timestamp"]),
+        delivery_id=case["delivery_id"],
+    )
 
 
 @pytest.mark.parametrize("case", INVALID, ids=[case["name"] for case in INVALID])
@@ -63,16 +69,16 @@ def test_invalid_vector_is_rejected_with_its_reason(case: dict[str, Any]) -> Non
 
 @pytest.mark.parametrize("case", VALID, ids=[case["name"] for case in VALID])
 def test_sign_matches_the_app(case: dict[str, Any]) -> None:
-    assert sign(case["timestamp"], case["body"], case["secret"]) == case["signature"]
+    assert sign(case["timestamp"], case["body"], case["secret"]) == case["signature"].lower()
 
 
 def test_a_body_with_unicode_escapes_is_verified_as_raw_bytes() -> None:
     case = next(case for case in VALID if "unicode" in case["name"])
     assert "\\u00e9" in case["body"]
     event = verify_webhook(case["body"], headers_of(case), SECRET, now=case["now"])
-    assert event["contact"]["company"] == "Café Ñandú"
+    assert event.payload["contact"]["company"] == "Café Ñandú"
     # A new encoding of the same payload gives other bytes, and fails.
-    encoded_again = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+    encoded_again = json.dumps(event.payload, ensure_ascii=False, separators=(",", ":"))
     with pytest.raises(WebhookVerificationError):
         verify_webhook(encoded_again, headers_of(case), SECRET, now=case["now"])
 
@@ -80,7 +86,7 @@ def test_a_body_with_unicode_escapes_is_verified_as_raw_bytes() -> None:
 def test_header_names_are_not_case_sensitive() -> None:
     case = VALID[0]
     headers = {name.lower(): value for name, value in headers_of(case).items()}
-    assert verify_webhook(case["body"], headers, SECRET, now=case["now"])["event"]
+    assert verify_webhook(case["body"], headers, SECRET, now=case["now"]).type
 
 
 def test_missing_signature_header() -> None:
@@ -117,7 +123,7 @@ def test_signature_with_non_ascii_characters_is_rejected() -> None:
 def test_tolerance_can_change() -> None:
     case = next(case for case in INVALID if case["name"] == "timestamp older than the tolerance")
     event = verify_webhook(case["body"], headers_of(case), SECRET, tolerance=600, now=case["now"])
-    assert event["event"] == "newsletter.sent"
+    assert event.type == "newsletter.sent"
     with pytest.raises(WebhookVerificationError):
         verify_webhook(case["body"], headers_of(case), SECRET, tolerance=10, now=case["now"])
 
@@ -131,11 +137,24 @@ def test_the_tolerance_limit_is_inclusive() -> None:
 def test_default_now_is_the_current_time() -> None:
     body = '{"event":"webhook.test","occurred_at":"2026-11-18T10:00:00+00:00"}'
     headers = signed_headers(body, str(int(time.time())))
-    assert verify_webhook(body, headers, SECRET)["event"] == "webhook.test"
+    assert verify_webhook(body, headers, SECRET).type == "webhook.test"
 
 
 def test_unknown_event_type_is_accepted() -> None:
     body = '{"event":"contact.tagged","occurred_at":"2026-11-18T10:00:00+00:00","tag":{"id":1}}'
     event = verify_webhook(body, signed_headers(body, "1763460000"), SECRET, now=1763460000)
-    assert event["event"] == "contact.tagged"
-    assert event["tag"] == {"id": 1}
+    assert event.type == "contact.tagged"
+    assert event.payload["tag"] == {"id": 1}
+    assert event.delivery_id is None
+
+
+def test_the_type_comes_from_the_event_header_when_the_payload_has_no_event() -> None:
+    body = '{"occurred_at":"2026-11-18T10:00:00+00:00"}'
+    headers = {**signed_headers(body, "1763460000"), "X-Byomailer-Event": "contact.tagged"}
+    assert verify_webhook(body, headers, SECRET, now=1763460000).type == "contact.tagged"
+
+
+def test_an_empty_delivery_header_gives_no_delivery_id() -> None:
+    case = VALID[0]
+    headers = {**headers_of(case), "X-Byomailer-Delivery": ""}
+    assert verify_webhook(case["body"], headers, SECRET, now=case["now"]).delivery_id is None

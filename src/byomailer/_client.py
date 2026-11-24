@@ -73,8 +73,11 @@ class BYOMailer:
         token: A personal API token. The default is ``$BYOMAILER_TOKEN``.
         timeout: The seconds to wait for the connection and for each read.
             The default is 30. ``None`` means no timeout.
-        max_retries: The number of retries after a 429, a 5xx or a connection
-            error. The default is 2. Use 0 to stop all retries.
+        max_retries: The number of retries. The default is 2. Use 0 to stop
+            all retries. The client retries a 429 and a connection error
+            before the send for each operation. It retries a 5xx, a read
+            timeout or a reset after the send only for an idempotent
+            operation.
         transport: Sends the HTTP requests. The default uses ``urllib``.
     """
 
@@ -127,11 +130,13 @@ class BYOMailer:
     def _get(self, path: str, params: Mapping[str, Any] | None = None) -> Any:
         return self._request("GET", path, params=params).json()
 
-    def _post(self, path: str, body: Mapping[str, Any] | None = None) -> Any:
-        return self._request("POST", path, body=body).json()
+    def _post(
+        self, path: str, body: Mapping[str, Any] | None = None, *, idempotent: bool = False
+    ) -> Any:
+        return self._request("POST", path, body=body, idempotent=idempotent).json()
 
-    def _patch(self, path: str, body: Mapping[str, Any]) -> Any:
-        return self._request("PATCH", path, body=body).json()
+    def _patch(self, path: str, body: Mapping[str, Any], *, idempotent: bool = False) -> Any:
+        return self._request("PATCH", path, body=body, idempotent=idempotent).json()
 
     def _delete(self, path: str) -> None:
         self._request("DELETE", path)
@@ -143,22 +148,34 @@ class BYOMailer:
         *,
         params: Mapping[str, Any] | None = None,
         body: Mapping[str, Any] | None = None,
+        idempotent: bool | None = None,
     ) -> Response:
+        """Send one request, with retries.
+
+        ``idempotent`` is ``True`` for an operation in the idempotent list of
+        the contract. The default comes from the method.
+        """
+        if idempotent is None:
+            idempotent = method in IDEMPOTENT_METHODS
         request = self._build_request(method, path, params, body)
         attempt = 0
         while True:
             try:
                 response = self._transport(request, self.timeout)
             except APIConnectionError as error:
-                delay = self._connection_retry_delay(error, method, attempt)
-                if delay is None:
+                # Before the send, the instance did not get the request, so
+                # a retry is safe for each operation.
+                retryable = idempotent or not error.request_sent
+                if not retryable or attempt >= self.max_retries:
                     raise
+                delay = backoff(attempt)
             else:
                 if 200 <= response.status_code < 300:
                     return _checked(response)
-                delay = self._response_retry_delay(response, method, attempt)
-                if delay is None:
+                wait = self._response_retry_delay(response, idempotent, attempt)
+                if wait is None:
                     raise error_from_response(response)
+                delay = wait
             _sleep(delay)
             attempt += 1
 
@@ -185,33 +202,25 @@ class BYOMailer:
             data = json.dumps(body).encode("utf-8")
         return Request(method, url, headers, data)
 
-    def _connection_retry_delay(
-        self, error: APIConnectionError, method: str, attempt: int
+    def _response_retry_delay(
+        self, response: Response, idempotent: bool, attempt: int
     ) -> float | None:
-        if attempt >= self.max_retries:
-            return None
-        if error.request_sent and method not in IDEMPOTENT_METHODS:
-            return None
-        return backoff(attempt)
-
-    def _response_retry_delay(self, response: Response, method: str, attempt: int) -> float | None:
         """Return the wait before the next attempt, or ``None`` for no retry.
 
-        The client retries a 429 for every method, because the rate limiter
+        The client retries a 429 for every operation, because the rate limiter
         refuses the request before the app does the action. The client retries
-        a 5xx only for an idempotent method.
+        a 5xx only for an idempotent operation. A ``Retry-After`` header
+        replaces the backoff.
         """
         if attempt >= self.max_retries:
             return None
         status = response.status_code
-        if status == 429:
-            retry_after = parse_retry_after(response.header("retry-after"))
-            if retry_after is None:
-                return backoff(attempt)
-            return retry_after if retry_after <= MAX_RETRY_AFTER else None
-        if status >= 500 and method in IDEMPOTENT_METHODS:
+        if status != 429 and not (status >= 500 and idempotent):
+            return None
+        retry_after = parse_retry_after(response.header("retry-after"))
+        if retry_after is None:
             return backoff(attempt)
-        return None
+        return retry_after if retry_after <= MAX_RETRY_AFTER else None
 
 
 def normalize_base_url(base_url: str) -> str:
