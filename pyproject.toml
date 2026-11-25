@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "BYOMailer" }]
+authors = [{ name = "Alejandro Medina" }]
 keywords = ["byomailer", "email", "newsletter", "amazon-ses", "webhooks", "api", "sdk"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -24,6 +24,9 @@ classifiers = [
 dependencies = []
 
 [project.urls]
+Homepage = "https://github.com/amedina068/byomailer-python"
+Documentation = "https://byomailer.com/docs/sdks/overview"
+Issues = "https://github.com/amedina068/byomailer-python/issues"
 Repository = "https://github.com/amedina068/byomailer-python"
 Changelog = "https://github.com/amedina068/byomailer-python/blob/main/CHANGELOG.md"
 
