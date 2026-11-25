@@ -1,5 +1,8 @@
 # byomailer
 
+[![CI](https://github.com/amedina068/byomailer-python/actions/workflows/ci.yml/badge.svg)](https://github.com/amedina068/byomailer-python/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/amedina068/byomailer-python/badge)](https://scorecard.dev/viewer/?uri=github.com/amedina068/byomailer-python)
+
 The Python client for BYOMailer. BYOMailer is a self-hosted app that sends newsletters and email sequences through your own Amazon SES account.
 
 Each user runs their own BYOMailer instance, so the URL of your instance is a required setting.
