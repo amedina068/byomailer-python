@@ -40,8 +40,6 @@ pip install "git+https://github.com/amedina068/byomailer-python.git"
 uv add "git+https://github.com/amedina068/byomailer-python.git"
 ```
 
-The repository is private. Your Git client needs read access to it.
-
 The package has no dependencies. It uses only the Python standard library.
 
 ## Quick start
