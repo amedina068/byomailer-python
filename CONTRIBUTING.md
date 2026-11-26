@@ -79,6 +79,20 @@ Use one of these types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `tes
 
 GitHub makes the release notes from the titles of the merged pull requests. Write each title for a person who reads the release notes.
 
+## Release
+
+The `Release` workflow (`.github/workflows/release.yml`) builds the package and publishes it to PyPI with trusted publishing (OIDC). The `build` job runs the checks and builds the sdist and the wheel. The `publish` job runs in the `pypi` environment and gets a short-lived token from PyPI. The repository has no PyPI secret. The `pypi` environment accepts only the `main` branch and the `v*` tags.
+
+1. Set the new version in `src/byomailer/_version.py`.
+2. In `CHANGELOG.md`, move the lines under `Unreleased` to a new section `## [<version>] - <date>`.
+3. Open a pull request with these changes. Merge it.
+4. Start the workflow: `gh workflow run release.yml --ref main`.
+5. Create the GitHub release `v<version>`. Use the section of `CHANGELOG.md` as the notes.
+
+### First release
+
+PyPI creates the project at the first publish. Before the first release, add a pending publisher at <https://pypi.org/manage/account/publishing/>: project `byomailer`, owner `amedina068`, repository `byomailer-python`, workflow `release.yml`, environment `pypi`.
+
 ## Triage
 
 Each issue form adds a type label and the `needs-triage` label to a new issue. The maintainer reads each new issue, removes `needs-triage` and sets the correct type label: `bug`, `enhancement`, `documentation` or `question`.
