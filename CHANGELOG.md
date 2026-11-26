@@ -4,7 +4,9 @@ All notable changes to this package are in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The package uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] - Unreleased
+## [Unreleased]
+
+## [0.2.0] - 2026-11-25
 
 This release adopts the API changes of BYOMailer app pull requests #114 and #115. It also gives the same behavior as the JS, PHP and Ruby SDKs.
 
@@ -38,7 +40,9 @@ This release adopts the API changes of BYOMailer app pull requests #114 and #115
 
 - The README caution that said that `contacts.update()` subscribes again a contact that an admin unsubscribed.
 
-## [0.1.0] - Unreleased
+## [0.1.0] - Not published
+
+Version 0.1.0 was not published. Release 0.2.0 contains these changes.
 
 ### Added
 
