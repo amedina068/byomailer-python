@@ -25,3 +25,7 @@ htmlcov/
 .vscode/
 .DS_Store
 REPORT-sdk.md
+
+# Internal notes of the maintainer
+BRIEF.md
+REPORT-*.md
